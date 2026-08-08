@@ -1,0 +1,10 @@
+{
+  "description": "This web application streamlines content consumption by providing an intuitive interface for users to easily read and interact with information.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
