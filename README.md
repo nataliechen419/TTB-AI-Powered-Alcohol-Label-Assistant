@@ -127,3 +127,7 @@ with live extraction instead of mock mode.
   compression.
 - No authentication — this is a prototype for internal review/testing, not
   a multi-tenant production system.
+
+See [`SECURITY.md`](SECURITY.md) for the full threat model — what's
+protected, what's explicitly accepted risk for a prototype at this stage,
+and why.
