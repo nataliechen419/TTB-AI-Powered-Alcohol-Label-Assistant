@@ -24,11 +24,14 @@ Requires Node 22.x and pnpm 10.34.3 (pinned in `.mise.toml` / `package.json#pack
 
 ```bash
 pnpm install
-cp .env.example .env   # then optionally fill in ANTHROPIC_API_KEY
+cp .env.example .env   # then fill in ANTHROPIC_API_KEY — required, the app does not run without it
 pnpm dev                # starts Vite (frontend + API) on http://localhost:8443
 ```
 
-No API key required to try the app — see **Mock mode** below.
+Extraction runs on Claude Haiku 4.5 as a vision task, returning a structured
+(Zod-validated) read of the label; the comparison/grading logic in
+`server/compare.ts` is ordinary application code, not something the model
+decides.
 
 Other scripts:
 
@@ -37,23 +40,6 @@ pnpm build      # production build (Vite) — also what Vercel runs
 pnpm preview    # serve the production build locally
 pnpm format     # oxfmt
 ```
-
-### Mock mode
-
-If `ANTHROPIC_API_KEY` isn't set, the app automatically runs in **mock
-mode**: every "analysis" is generated locally by a deterministic, seeded
-mock extractor (`server/mock.ts`) instead of calling Claude. Same image in →
-same result out, every time, with zero API cost and zero network dependency.
-This is what lets the deployed prototype (below) be safely demoable without
-anyone needing to supply their own key. Mock mode can also be forced on/off
-explicitly with `MOCK_MODE=true` / `MOCK_MODE=false` regardless of whether a
-key is present. Any result produced this way is labeled "Demo mode" in the
-UI so it's never mistaken for a real Claude call.
-
-With a real `ANTHROPIC_API_KEY`, extraction runs on Claude Haiku 4.5 as a
-vision task, returning a structured (Zod-validated) read of the label; the
-comparison/grading logic in `server/compare.ts` is ordinary application
-code, not something the model decides.
 
 ## Deployment (Vercel)
 
@@ -65,13 +51,14 @@ vercel --prod # promote to production
 The app is a static Vite build (`vercel build`'s default framework
 detection) plus one serverless function, `api/[...path].ts`, which is a
 catch-all that delegates to the same request handler
-(`handleApiRequest` in `server/plugin.ts`) used by the local dev server —
+(`handleApiRequest` in `server/api.ts`) used by the local dev server —
 so there's one implementation of every route, not two that can drift apart.
 `vercel.json` raises that function's `maxDuration` to 60s (the max on the
 Hobby plan) since label extraction is a multi-second Claude vision call.
 
-Set `ANTHROPIC_API_KEY` in the Vercel project's Environment Variables to run
-with live extraction instead of mock mode.
+**`ANTHROPIC_API_KEY` must be set in the Vercel project's Environment
+Variables** — the app has no fallback mode and every extraction call fails
+without it.
 
 ## Approach, tools, and assumptions
 
@@ -118,6 +105,11 @@ with live extraction instead of mock mode.
 - **Concurrency is capped, not unlimited.** Batch analysis runs 6 files at a
   time (`runPool` in `server/batch.ts`) rather than firing hundreds of
   simultaneous Claude calls at once.
+- **Every route that spends Claude API credits is rate-limited per client
+  IP** (`server/rateLimit.ts`) — 20 requests per 10 minutes, in-memory,
+  returning `429` with `Retry-After` once exceeded. See
+  [`SECURITY.md`](SECURITY.md) for the honest limits of this (per-instance,
+  not distributed).
 
 ## Known limitations
 

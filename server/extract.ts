@@ -2,17 +2,14 @@ import Anthropic from '@anthropic-ai/sdk'
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import sharp from 'sharp'
 import { z } from 'zod'
-import type { ApplicationData } from './db'
-import { isMockMode, mockExtractFromApplication, mockExtractStandalone } from './mock'
-
 // Constructed lazily (on first real API call) rather than as a module-level
 // constant. vite.config.ts's dotenv loading runs *after* its static imports
 // (which include this module, transitively) due to ES module import
 // hoisting — so a top-level `new Anthropic()` here would capture
 // process.env.ANTHROPIC_API_KEY before dotenv ever set it, permanently
-// baking in "no key" for the life of the process even though isMockMode()
-// (which reads process.env per-call, not at import time) reports live mode
-// correctly. Lazy construction sidesteps the ordering issue entirely.
+// baking in "no key" for the life of the process. Lazy construction
+// sidesteps the ordering issue entirely; the Anthropic SDK itself throws a
+// clear error at construction time if the key is still missing.
 let client: Anthropic | undefined
 function getClient(): Anthropic {
   if (!client) client = new Anthropic()
@@ -51,9 +48,6 @@ Never guess at illegible text — accuracy matters more than completeness in a c
 
 export interface ExtractionResult {
   data: LabelExtraction
-  /** True when this result was generated locally instead of via a live
-   * Claude API call — see server/mock.ts for why and when this happens. */
-  mockMode: boolean
   /** Wall-clock time spent on the extraction call itself, in ms — surfaced
    * to the reviewer so "how long did this take" isn't a mystery. Measured
    * here (not in the route handler) so it covers exactly the model call,
@@ -177,17 +171,8 @@ async function tileImage(image: ImageInput): Promise<ImageInput[] | null> {
 export async function extractLabelFields(
   imageBase64: string,
   mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif',
-  context?: { applicationData?: ApplicationData; fileName?: string },
 ): Promise<ExtractionResult> {
   const startedAt = Date.now()
-
-  if (isMockMode()) {
-    const buffer = Buffer.from(imageBase64, 'base64')
-    const data = context?.applicationData
-      ? mockExtractFromApplication(context.applicationData, buffer)
-      : mockExtractStandalone(buffer, context?.fileName ?? '')
-    return { data, mockMode: true, durationMs: Date.now() - startedAt }
-  }
 
   const tiles = await tileImage({ mediaType, base64: imageBase64 })
 
@@ -221,5 +206,5 @@ export async function extractLabelFields(
     throw new Error('Label extraction failed to produce structured output')
   }
 
-  return { data: response.parsed_output, mockMode: false, durationMs: Date.now() - startedAt }
+  return { data: response.parsed_output, durationMs: Date.now() - startedAt }
 }

@@ -285,12 +285,6 @@ export default function LabelReview({ id, navigate }: { id: string | null; navig
           <IconButton onClick={() => setZoom(1)} disabled={!hasImage} style={{ width: 'auto', padding: '0 8px', fontSize: 13 }}>Reset</IconButton>
         </div>
 
-        {app.review?.mockMode && (
-          <div style={{ padding: '8px 16px', background: '#FFFBEB', borderBottom: '1px solid #FDE68A', fontSize: 14, color: '#92400E' }}>
-            Demo mode — this result is simulated locally, not a live Claude analysis.
-          </div>
-        )}
-
         {isPoorQuality && (
           <div style={{ padding: '10px 16px', background: '#FFFBEB', borderBottom: '1px solid #FDE68A', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             <span style={{ fontSize: 15 }}>⚠️</span>

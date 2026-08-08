@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { waitUntil } from '@vercel/functions'
 import { extractLabelFields } from './extract'
 import { validateStandalone } from './compare'
-import { isMockMode } from './mock'
 import type { Decision, FieldResult } from './db'
 
 export type BatchFileStatus = 'Approved' | 'Needs Review' | 'Flagged' | 'Error'
@@ -43,10 +42,6 @@ export interface BatchJob {
   done: number
   results: BatchResult[]
   finished: boolean
-  /** True when this job was run with the local mock extractor instead of
-   * live Claude calls (see server/mock.ts) — surfaced so the UI can flag
-   * results as simulated. */
-  mockMode: boolean
 }
 
 const jobs = new Map<string, BatchJob>()
@@ -61,8 +56,8 @@ export function getBatchJob(id: string): BatchJob | undefined {
  * job store as multi-file batches gives Custom Test Mode the same
  * decision-setting and later-retrieval behavior (GET /api/batch/:id) for
  * free, instead of needing a parallel storage mechanism. */
-export function createCompletedJob(result: BatchResult, mockMode: boolean): BatchJob {
-  const job: BatchJob = { id: randomUUID(), total: 1, done: 1, results: [result], finished: true, mockMode }
+export function createCompletedJob(result: BatchResult): BatchJob {
+  const job: BatchJob = { id: randomUUID(), total: 1, done: 1, results: [result], finished: true }
   jobs.set(job.id, job)
   return job
 }
@@ -112,7 +107,7 @@ async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => 
 }
 
 export function startBatchJob(files: { name: string; buffer: Buffer; mimetype: string }[]): BatchJob {
-  const job: BatchJob = { id: randomUUID(), total: files.length, done: 0, results: [], finished: false, mockMode: isMockMode() }
+  const job: BatchJob = { id: randomUUID(), total: files.length, done: 0, results: [], finished: false }
   jobs.set(job.id, job)
 
   // The route handler responds with 202 + jobId immediately and the caller
@@ -131,7 +126,7 @@ export function startBatchJob(files: { name: string; buffer: Buffer; mimetype: s
         return
       }
 
-      const extraction = await extractLabelFields(file.buffer.toString('base64'), file.mimetype as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif', { fileName: file.name })
+      const extraction = await extractLabelFields(file.buffer.toString('base64'), file.mimetype as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif')
       const fields = validateStandalone(extraction.data)
       const { status, flagged } = statusFromFields(fields)
       const brand = extraction.data.brandName.trim() && extraction.data.brandName.trim() !== 'UNREADABLE' ? extraction.data.brandName : file.name

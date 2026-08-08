@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Dashboard from './views/Dashboard'
 import LabelReview from './views/LabelReview'
 import BatchUpload from './views/BatchUpload'
@@ -8,14 +8,6 @@ export type Screen = 'dashboard' | 'review' | 'batch'
 export default function App() {
   const [screen, setScreen] = useState<Screen>('dashboard')
   const [reviewId, setReviewId] = useState<string | null>(null)
-  const [mockMode, setMockMode] = useState(false)
-
-  useEffect(() => {
-    fetch('/api/status')
-      .then(res => res.json())
-      .then(data => setMockMode(!!data.mockMode))
-      .catch(() => {})
-  }, [])
 
   const navigate = (s: Screen, id?: string) => {
     setScreen(s)
@@ -24,7 +16,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Header screen={screen} navigate={navigate} mockMode={mockMode} />
+      <Header screen={screen} navigate={navigate} />
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {screen === 'dashboard' && <Dashboard navigate={navigate} />}
         {screen === 'review'    && <LabelReview id={reviewId} navigate={navigate} />}
@@ -34,7 +26,7 @@ export default function App() {
   )
 }
 
-function Header({ screen, navigate, mockMode }: { screen: Screen; navigate: (s: Screen) => void; mockMode: boolean }) {
+function Header({ screen, navigate }: { screen: Screen; navigate: (s: Screen) => void }) {
   return (
     <header style={{
       background: '#fff',
@@ -73,21 +65,7 @@ function Header({ screen, navigate, mockMode }: { screen: Screen; navigate: (s: 
         ))}
       </nav>
 
-      {mockMode && (
-        <span
-          title="No live Claude API calls are made — all extraction results are simulated locally. Safe to test with any number of uploads."
-          style={{
-            marginLeft: 'auto',
-            fontSize: 12, fontWeight: 600, color: '#B45309', background: '#FFFBEB',
-            border: '1px solid #FDE68A', borderRadius: 20, padding: '4px 12px',
-            whiteSpace: 'nowrap', cursor: 'default',
-          }}
-        >
-          Demo Mode — simulated results, no API calls
-        </span>
-      )}
-
-      <div style={{ marginLeft: mockMode ? 0 : 'auto', fontSize: 14, color: '#9CA3AF' }}>
+      <div style={{ marginLeft: 'auto', fontSize: 14, color: '#9CA3AF' }}>
         M. Torres
       </div>
     </header>

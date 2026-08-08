@@ -227,7 +227,6 @@ export default function BatchUpload({ navigate }: { navigate: (s: Screen, id?: s
             done: jobResults.reduce((n, j) => n + j.done, 0),
             results: jobResults.flatMap(j => j.results.map(r => ({ ...r, jobId: j.id }))),
             finished: jobResults.every(j => j.finished),
-            mockMode: jobResults.some(j => j.mockMode),
           }
           setJob(merged)
           if (merged.finished) {
@@ -436,12 +435,6 @@ export default function BatchUpload({ navigate }: { navigate: (s: Screen, id?: s
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '36px 32px', width: '100%' }}>
-      {job?.mockMode && (
-        <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '12px 18px', fontSize: 15, color: '#92400E', marginBottom: 20 }}>
-          Demo mode — these results are simulated locally, no live Claude calls were made.
-        </div>
-      )}
-
       {/* Progress */}
       <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: '20px 24px', marginBottom: 28 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: stage !== 'done' ? 12 : 0 }}>

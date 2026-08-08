@@ -20,9 +20,28 @@ import { applications, getApplication, listApplications } from './db'
 import { extractLabelFields } from './extract'
 import { compareToApplication, compareFlexible } from './compare'
 import { getBatchJob, startBatchJob, statusFromFields, createCompletedJob, setResultDecision } from './batch'
-import { isMockMode } from './mock'
+import { enforceAnalysisRateLimit } from './rateLimit'
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } })
+// Lowered from an earlier 25MB: a genuine phone photo of a label is a few MB
+// at most, and 25MB per file (up to 300 files in one /api/batch request) was
+// more headroom than any real label photo needs — 10MB keeps normal uploads
+// working with margin while capping the worst case.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
+
+const MAX_TEXT_FIELD_LENGTH = 300
+const MAX_ADDRESS_LENGTH = 500
+const MAX_COMMENT_LENGTH = 1000
+
+/** Rejects with 400 if `value` is longer than `maxLength`, rather than
+ * silently truncating — truncation would let an oversized submission through
+ * looking successful while quietly corrupting the stored value. */
+function validateFieldLength(res: ServerResponse, label: string, value: string, maxLength: number): boolean {
+  if (value.length > maxLength) {
+    sendJson(res, 400, { error: `${label} must be ${maxLength} characters or fewer.` })
+    return false
+  }
+  return true
+}
 
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
   res.statusCode = status
@@ -113,10 +132,6 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
     const path = url.pathname
     const method = req.method || 'GET'
 
-    if (path === '/api/status' && method === 'GET') {
-      return sendJson(res, 200, { mockMode: isMockMode() })
-    }
-
     if (path === '/api/applications' && method === 'GET') {
       const apps = listApplications().map(({ labelImageDataUrl: _labelImageDataUrl, ...rest }) => rest)
       return sendJson(res, 200, apps)
@@ -133,6 +148,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
     if (labelMatch && method === 'POST') {
       const app = getApplication(decodeURIComponent(labelMatch[1]))
       if (!app) return sendJson(res, 404, { error: 'Application not found' })
+      if (!enforceAnalysisRateLimit(req, res)) return
 
       await runMulter(upload.single('image') as unknown as LooseHandler, req, res)
       const file = (req as IncomingMessage & { file?: Express.Multer.File }).file
@@ -147,7 +163,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 
       let extraction
       try {
-        extraction = await extractLabelFields(base64, mediaType, { applicationData: app.applicationData })
+        extraction = await extractLabelFields(base64, mediaType)
       } catch (err) {
         const { status, message } = describeAnthropicError(err)
         return sendJson(res, status, { error: message })
@@ -160,7 +176,6 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         imageQuality: extraction.data.imageQuality,
         qualityNote: extraction.data.qualityNote,
         reviewedAt: new Date().toISOString(),
-        mockMode: extraction.mockMode,
         durationMs: extraction.durationMs,
       }
       app.flagged = fields.filter(f => f.status === 'mismatch' || f.status === 'missing' || f.status === 'unreadable').length
@@ -174,6 +189,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       const app = getApplication(decodeURIComponent(analyzeMatch[1]))
       if (!app) return sendJson(res, 404, { error: 'Application not found' })
       if (!app.labelImageDataUrl) return sendJson(res, 400, { error: 'No label image is available to analyze. Upload one first.' })
+      if (!enforceAnalysisRateLimit(req, res)) return
 
       let base64: string
       let mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'
@@ -185,7 +201,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 
       let extraction
       try {
-        extraction = await extractLabelFields(base64, mediaType, { applicationData: app.applicationData })
+        extraction = await extractLabelFields(base64, mediaType)
       } catch (err) {
         const { status, message } = describeAnthropicError(err)
         return sendJson(res, status, { error: message })
@@ -197,7 +213,6 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         imageQuality: extraction.data.imageQuality,
         qualityNote: extraction.data.qualityNote,
         reviewedAt: new Date().toISOString(),
-        mockMode: extraction.mockMode,
         durationMs: extraction.durationMs,
       }
       app.flagged = fields.filter(f => f.status === 'mismatch' || f.status === 'missing' || f.status === 'unreadable').length
@@ -218,6 +233,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       if (action !== 'approve' && action !== 'reject' && action !== 'flag') {
         return sendJson(res, 400, { error: 'action must be one of approve, reject, flag' })
       }
+      if (!validateFieldLength(res, 'Comment', comment, MAX_COMMENT_LENGTH)) return
 
       app.decision = { action, comment, at: new Date().toISOString() }
       app.status = action === 'approve' ? 'Approved' : action === 'reject' ? 'Flagged' : 'Needs Review'
@@ -227,23 +243,39 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
     }
 
     if (path === '/api/test-label' && method === 'POST') {
+      if (!enforceAnalysisRateLimit(req, res)) return
+
       await runMulter(upload.single('image') as unknown as LooseHandler, req, res)
       const file = (req as IncomingMessage & { file?: Express.Multer.File }).file
       const body = (req as IncomingMessage & { body?: Record<string, string> }).body ?? {}
 
       const brandName = (body.brandName ?? '').trim()
+      const beverageType = (body.beverageType ?? '').trim()
+      const classType = (body.classType ?? '').trim()
+      const abv = (body.abv ?? '').trim()
+      const netContents = (body.netContents ?? '').trim()
+      const bottlerAddress = (body.bottlerAddress ?? '').trim()
+      const countryOfOrigin = (body.countryOfOrigin ?? '').trim()
+
       if (!brandName) return sendJson(res, 400, { error: 'Brand name is required.' })
       if (!file) return sendJson(res, 400, { error: 'No image file was uploaded (expected field "image").' })
       if (!SUPPORTED_IMAGE_MIME.has(file.mimetype)) {
         return sendJson(res, 415, { error: 'Unsupported file type. Please upload a JPG, PNG, WEBP, or GIF image.' })
       }
+      if (!validateFieldLength(res, 'Brand name', brandName, MAX_TEXT_FIELD_LENGTH)) return
+      if (!validateFieldLength(res, 'Beverage type', beverageType, MAX_TEXT_FIELD_LENGTH)) return
+      if (!validateFieldLength(res, 'Class/type', classType, MAX_TEXT_FIELD_LENGTH)) return
+      if (!validateFieldLength(res, 'ABV', abv, MAX_TEXT_FIELD_LENGTH)) return
+      if (!validateFieldLength(res, 'Net contents', netContents, MAX_TEXT_FIELD_LENGTH)) return
+      if (!validateFieldLength(res, 'Bottler address', bottlerAddress, MAX_ADDRESS_LENGTH)) return
+      if (!validateFieldLength(res, 'Country of origin', countryOfOrigin, MAX_TEXT_FIELD_LENGTH)) return
 
       const mediaType = file.mimetype as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'
       const base64 = file.buffer.toString('base64')
 
       let extraction
       try {
-        extraction = await extractLabelFields(base64, mediaType, { fileName: file.originalname })
+        extraction = await extractLabelFields(base64, mediaType)
       } catch (err) {
         const { status, message } = describeAnthropicError(err)
         return sendJson(res, status, { error: message })
@@ -252,12 +284,12 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       const fields = compareFlexible(
         {
           brandName,
-          beverageType: body.beverageType,
-          classType: body.classType,
-          abv: body.abv,
-          netContents: body.netContents,
-          bottlerAddress: body.bottlerAddress,
-          countryOfOrigin: body.countryOfOrigin,
+          beverageType,
+          classType,
+          abv,
+          netContents,
+          bottlerAddress,
+          countryOfOrigin,
         },
         extraction.data,
       )
@@ -274,12 +306,14 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         imageQuality: extraction.data.imageQuality,
         qualityNote: extraction.data.qualityNote,
         labelImageDataUrl: `data:${mediaType};base64,${base64}`,
-      }, extraction.mockMode)
+      })
 
       return sendJson(res, 200, job)
     }
 
     if (path === '/api/batch' && method === 'POST') {
+      if (!enforceAnalysisRateLimit(req, res)) return
+
       await runMulter(upload.array('files', 300) as unknown as LooseHandler, req, res)
       const files = (req as IncomingMessage & { files?: Express.Multer.File[] }).files ?? []
       if (files.length === 0) return sendJson(res, 400, { error: 'No files were uploaded (expected field "files").' })
@@ -305,6 +339,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       if (action !== 'approve' && action !== 'reject' && action !== 'flag') {
         return sendJson(res, 400, { error: 'action must be one of approve, reject, flag' })
       }
+      if (!validateFieldLength(res, 'Comment', comment, MAX_COMMENT_LENGTH)) return
 
       const result = setResultDecision(decodeURIComponent(jobId), decodeURIComponent(resultId), { action, comment, at: new Date().toISOString() })
       if (!result) return sendJson(res, 404, { error: 'Batch result not found' })

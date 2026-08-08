@@ -2,9 +2,9 @@
 // that's already present in process.env — including an inherited *blank*
 // string (e.g. some shells/CI/sandboxes pre-declare ANTHROPIC_API_KEY=""
 // as a placeholder). Without override, a real key in .env would be silently
-// ignored in that case and the app would fall back to mock mode with no
-// error at all, which is a much worse failure mode than .env taking
-// priority over an ambient env var during local dev.
+// ignored in that case, and every extraction call would fail with an
+// authentication error instead of picking up the real key — .env should
+// take priority over an ambient env var during local dev.
 import { config as loadDotenv } from 'dotenv'
 loadDotenv({ override: true })
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from 'vite'
