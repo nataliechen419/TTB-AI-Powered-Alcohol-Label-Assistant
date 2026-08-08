@@ -8,6 +8,13 @@
 // handleApiRequest used locally, so the two hosts share one implementation
 // instead of drifting apart.
 //
+// Imports handleApiRequest from server/api.ts, NOT server/plugin.ts — the
+// latter also exports a Vite `Plugin` factory and imports `vite`'s types to
+// do it, which Vercel's Node.js Function build step doesn't reliably
+// resolve (it isn't running through our project tsconfig). Going straight
+// to server/api.ts keeps `vite` (a devDependency) out of this function's
+// import graph entirely.
+//
 // One real behavior difference to be aware of: Vercel Node functions are
 // stateless and short-lived, so the in-memory `applications`/job maps in
 // server/db.ts and server/batch.ts only persist for as long as a given
@@ -20,7 +27,7 @@
 // export — that convention is specific to Next.js's app/api routes; plain
 // /api functions like this one are configured through vercel.json instead).
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { handleApiRequest } from '../server/plugin'
+import { handleApiRequest } from '../server/api'
 
 export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   try {
