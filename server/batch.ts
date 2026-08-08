@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { waitUntil } from '@vercel/functions'
-import { extractLabelFields } from './extract'
-import { validateStandalone } from './compare'
-import type { Decision, FieldResult } from './db'
+import { extractLabelFields } from './extract.js'
+import { validateStandalone } from './compare.js'
+import type { Decision, FieldResult } from './db.js'
 
 export type BatchFileStatus = 'Approved' | 'Needs Review' | 'Flagged' | 'Error'
 

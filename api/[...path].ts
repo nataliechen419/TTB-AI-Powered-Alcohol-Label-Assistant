@@ -27,7 +27,7 @@
 // export — that convention is specific to Next.js's app/api routes; plain
 // /api functions like this one are configured through vercel.json instead).
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { handleApiRequest } from '../server/api'
+import { handleApiRequest } from '../server/api.js'
 
 export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   try {

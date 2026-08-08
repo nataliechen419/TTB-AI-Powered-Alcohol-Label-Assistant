@@ -1,5 +1,5 @@
 import type { Plugin } from 'vite'
-import { handleApiRequest } from './api'
+import { handleApiRequest } from './api.js'
 
 /** Adds /api/* label-verification routes as Vite dev-server middleware,
  * following the same configureServer + middlewares.use pattern as the

@@ -1,5 +1,5 @@
-import { FIELD_LABELS, STATUTORY_GOVERNMENT_WARNING, type ApplicationData, type FieldKey, type FieldResult } from './db'
-import { UNREADABLE, type LabelExtraction } from './extract'
+import { FIELD_LABELS, STATUTORY_GOVERNMENT_WARNING, type ApplicationData, type FieldKey, type FieldResult } from './db.js'
+import { UNREADABLE, type LabelExtraction } from './extract.js'
 
 /** Lowercases, drops decorative punctuation, and collapses whitespace so
  * "STONE'S THROW" and "Stone's Throw" — or "12.5% Alc. by Vol." and

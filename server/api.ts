@@ -16,11 +16,11 @@ import * as nodePath from 'node:path'
 import { randomUUID } from 'node:crypto'
 import Anthropic from '@anthropic-ai/sdk'
 import multer from 'multer'
-import { applications, getApplication, listApplications } from './db'
-import { extractLabelFields } from './extract'
-import { compareToApplication, compareFlexible } from './compare'
-import { getBatchJob, startBatchJob, statusFromFields, createCompletedJob, setResultDecision } from './batch'
-import { enforceAnalysisRateLimit } from './rateLimit'
+import { applications, getApplication, listApplications } from './db.js'
+import { extractLabelFields } from './extract.js'
+import { compareToApplication, compareFlexible } from './compare.js'
+import { getBatchJob, startBatchJob, statusFromFields, createCompletedJob, setResultDecision } from './batch.js'
+import { enforceAnalysisRateLimit } from './rateLimit.js'
 
 // Lowered from an earlier 25MB: a genuine phone photo of a label is a few MB
 // at most, and 25MB per file (up to 300 files in one /api/batch request) was
